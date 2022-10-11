@@ -10,7 +10,7 @@ fn main() {
         engine: Engine::MyISAM,
         drop_exist: false,
     };
-    generator.generate(arg);
+    generator.generate_definition(arg);
 }
 
 

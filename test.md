@@ -7,3 +7,5 @@
 |  id   |     int     |   主键    |  true   |      true      |          |        |         |
 | name  | varchar(50) |   名称    |         |                |   true   |  true  |         |
 |  age  |     int     |   年龄    |         |                |   true   |        |    0    |
+
+### player
