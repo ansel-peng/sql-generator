@@ -1,16 +1,14 @@
 use std::env;
-use crate::sql::generator::{Engine, Generator};
+use crate::sql::generator::Generator;
 
 mod sql;
 
 fn main() {
     let arg = env::args().nth(1).expect("no path given");
-    let generator = Generator {
-        charset: "".to_string(),
-        engine: Engine::MyISAM,
-        drop_exist: false,
-    };
-    generator.generate_definition(arg);
+    let generator = Generator::default();
+    generator.generate(arg);
 }
+
+
 
 
