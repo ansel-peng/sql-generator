@@ -1,2 +1,6 @@
 /target
 /.idea
+/.fleet
+
+# maybe delete in the future
+init.sql

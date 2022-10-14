@@ -1,12 +1,16 @@
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::vec;
-use lazy_static::lazy_static;
-use regex::Regex;
+use crate::sql::common::{Field, fields_array_to_map, get_fields, get_table};
+
+
+const TRUE: &str = "true";
 
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Engine {
     MyISAM,
     InnoDB,
@@ -40,7 +44,7 @@ impl Default for Generator<'_> {
 }
 
 impl Generator<'_> {
-    //generate sql
+    //generate
     pub fn generate(&self, url: String) {
         // open markdown file
         let file = OpenOptions::new()
@@ -65,7 +69,8 @@ impl Generator<'_> {
             let table_option = get_table(line.as_ref().unwrap().trim());
             if let Some(value) = table_option {
                 if let Some(value) = table {
-                    self.generate_sql(array, value, &mut file);
+                    let map = fields_array_to_map(array);
+                    self.generate_sql(map, value, &mut file);
                     array = core::array::from_fn(|_| vec![]);
                 }
                 table = Some(value);
@@ -79,11 +84,13 @@ impl Generator<'_> {
             }
         }
         if let Some(value) = table {
-            self.generate_sql(array, value, &mut file);
+            let map = fields_array_to_map(array);
+            self.generate_sql(map, value, &mut file);
         }
     }
 
-    fn generate_sql(&self, array: [Vec<String>; 8], table_name: String, file: &mut File) {
+    //generate sql
+    fn generate_sql(&self, map: HashMap<String, Vec<String>>, table_name: String, file: &mut File) {
         let drop_exist_line = self.drop_exist_table(&table_name);
         if let Some(str) = drop_exist_line {
             file.write_all(str.as_bytes()).expect("write error!");
@@ -91,8 +98,48 @@ impl Generator<'_> {
             file.write_all(create_line.as_bytes()).expect("write error!");
         }
         const TAB: &str = "\n\t\t\t\t\t\t";
-        for i in &array[0] {
-            
+        for i in 0..map.get(Field::Field.call()).expect("no Field").len() {
+            let field = map.get(Field::Field.call())
+                .expect("no Field")
+                .get(i)
+                .expect("no index!");
+            let field_type = map.get(Field::Type.call())
+                .expect("no type")
+                .get(i)
+                .expect("no index!");
+            let not_null = map.get(Field::NotNull.call())
+                .expect("no not_null")
+                .get(i)
+                .expect("no index!");
+            let auto_increment = map.get(Field::AutoIncrement.call())
+                .expect("no auto_increment")
+                .get(i)
+                .expect("no index!");
+            let comment = map.get(Field::Comment.call())
+                .expect("no comment")
+                .get(i)
+                .expect("no index!");
+            let mut field_line;
+            if auto_increment == TRUE {
+                if not_null == TRUE {
+                    field_line = format!("{}`{}` {} {}", TAB, field, field_type, "NOT NULL AUTO_INCREMENT");
+                } else {
+                    std::fs::remove_file("init.sql").expect("remove err!");
+                    panic!("{} is is self increasing, but it defaults to null!", field);
+                }
+            } else {
+                if not_null == TRUE {
+                    field_line = format!("{}`{}` {} {}", TAB, field, field_type, "NOT NULL");
+                } else {
+                    field_line = format!("{}`{}` {} {}", TAB, field, field_type, "DEFAULT NULL");
+                }
+            }
+            if !comment.is_empty() {
+                field_line = field_line + " comment '" + comment + "',";
+            } else {
+                field_line = field_line + ",";
+            }
+            file.write_all(field_line.as_bytes()).expect("write error!");
         }
         let end_line = format!("\n) ENGINE={} DEFAULT CHARSET={};", self.engine.call(), self.charset);
         file.write_all(end_line.as_bytes()).expect("write error!");
@@ -104,36 +151,6 @@ impl Generator<'_> {
             return Some(format!("\nDROP TABLE IF EXISTS `{}`;", table_name));
         }
         return None;
-    }
-}
-
-//get table
-fn get_table(line: &str) -> Option<String> {
-    lazy_static! {
-        static ref TABLE_REGEX:Regex = Regex::new(r"^#{3}").unwrap();
-    }
-    let table_name: String;
-    if TABLE_REGEX.is_match(line) {
-        let temp = &line[3..line.len()];
-        table_name = temp.trim().parse().unwrap();
-        if table_name.is_empty() {
-            return None;
-        }
-        return Some(String::from(table_name));
-    };
-    return None;
-}
-
-//get fields
-fn get_fields(line: &str, array: &mut [Vec<String>; 8]) {
-    let line = &line[1..=line.len() - 2];
-    let fields: Vec<&str> = line.split("|").collect();
-    if fields.len() == 8 {
-        let mut i = 0;
-        for field in fields {
-            array[i].push(String::from(field.trim()));
-            i += 1;
-        }
     }
 }
 
