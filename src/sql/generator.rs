@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::vec;
-use crate::sql::common::{Field, fields_array_to_map, get_fields, get_table};
+use crate::sql::common::{Field, fields_array_to_map, get_fields, get_md_field, get_table};
 
 
 const TRUE: &str = "true";
@@ -98,27 +98,18 @@ impl Generator<'_> {
             file.write_all(create_line.as_bytes()).expect("write error!");
         }
         const TAB: &str = "\n\t\t\t\t\t\t";
+        let mut primary_key = None;
         for i in 0..map.get(Field::Field.call()).expect("no Field").len() {
-            let field = map.get(Field::Field.call())
-                .expect("no Field")
-                .get(i)
-                .expect("no index!");
-            let field_type = map.get(Field::Type.call())
-                .expect("no type")
-                .get(i)
-                .expect("no index!");
-            let not_null = map.get(Field::NotNull.call())
-                .expect("no not_null")
-                .get(i)
-                .expect("no index!");
-            let auto_increment = map.get(Field::AutoIncrement.call())
-                .expect("no auto_increment")
-                .get(i)
-                .expect("no index!");
-            let comment = map.get(Field::Comment.call())
-                .expect("no comment")
-                .get(i)
-                .expect("no index!");
+            if i != 0 {
+                file.write_all(b",").expect("write error!");
+            }
+            let field = get_md_field(Field::Field, &map, i);
+            let field_type = get_md_field(Field::Type, &map, i);
+            let not_null = get_md_field(Field::NotNull, &map, i);
+            let auto_increment = get_md_field(Field::AutoIncrement, &map, i);
+            let comment = get_md_field(Field::Comment, &map, i);
+            let default = get_md_field(Field::Default, &map, i);
+            let primary = get_md_field(Field::Primary, &map, i);
             let mut field_line;
             if auto_increment == TRUE {
                 if not_null == TRUE {
@@ -134,12 +125,22 @@ impl Generator<'_> {
                     field_line = format!("{}`{}` {} {}", TAB, field, field_type, "DEFAULT NULL");
                 }
             }
+            if !default.is_empty() {
+                field_line = field_line + " DEFAULT '" + default + "'";
+            }
             if !comment.is_empty() {
-                field_line = field_line + " comment '" + comment + "',";
+                field_line = field_line + " comment '" + comment + "'";
             } else {
-                field_line = field_line + ",";
+                field_line = field_line;
+            }
+            if !primary.is_empty() {
+                primary_key = Some(field);
             }
             file.write_all(field_line.as_bytes()).expect("write error!");
+        }
+        if let Some(value) = primary_key {
+            let primary_line = format!(",{}PRIMARY KEY (`{}`)", TAB, value);
+            file.write_all(primary_line.as_bytes()).expect("write error!");
         }
         let end_line = format!("\n) ENGINE={} DEFAULT CHARSET={};", self.engine.call(), self.charset);
         file.write_all(end_line.as_bytes()).expect("write error!");

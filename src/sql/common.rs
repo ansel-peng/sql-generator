@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Field {
     Field,
     Type,
@@ -75,4 +76,11 @@ pub fn fields_array_to_map(mut array: [Vec<String>; 8]) -> HashMap<String, Vec<S
         map.insert(key.to_lowercase(), vec);
     }
     return map;
+}
+
+pub fn get_md_field(field: Field, map: &HashMap<String, Vec<String>>, index: usize) -> &String {
+    map.get(field.call())
+        .expect("no Field")
+        .get(index)
+        .expect("no index!")
 }
