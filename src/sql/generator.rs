@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::vec;
-use crate::sql::common::{Field, fields_array_to_map, get_fields, get_md_field, get_table};
+use crate::sql::common::{Field, field_array_to_map, get_fields, get_indexes, get_md_field, get_table, index_array_to_map};
 
 
 const TRUE: &str = "true";
@@ -60,18 +60,23 @@ impl Generator<'_> {
             Ok(file) => file,
         };
         file.write_all(b"-- init sql").expect("write error");
-        let mut table = None;
+        let mut table: Option<String> = None;
         //Identifies the first match to the table name
         let mut flag = false;
-        let mut array = core::array::from_fn(|_| vec![]);
+        let mut array = Box::new(core::array::from_fn(|_| vec![]));
+        //index or unique
+        let mut other = Box::new(core::array::from_fn(|_| vec![]));
         for line in fin.lines() {
             //get table
             let table_option = get_table(line.as_ref().unwrap().trim());
             if let Some(value) = table_option {
                 if let Some(value) = table {
-                    let map = fields_array_to_map(array);
-                    self.generate_sql(map, value, &mut file);
-                    array = core::array::from_fn(|_| vec![]);
+                    let map = field_array_to_map(array);
+                    let index_map = index_array_to_map(other);
+                    self.generate_sql(map, value.clone(), &mut file);
+                    self.generate_index(index_map, value.clone(), &mut file);
+                    array = Box::new(core::array::from_fn(|_| vec![]));
+                    other = Box::new(core::array::from_fn(|_| vec![]));
                 }
                 table = Some(value);
                 flag = true;
@@ -81,11 +86,14 @@ impl Generator<'_> {
             let line = line.as_ref().unwrap().trim();
             if !line.is_empty() && flag {
                 get_fields(line, &mut array);
+                get_indexes(line, &mut other);
             }
         }
         if let Some(value) = table {
-            let map = fields_array_to_map(array);
-            self.generate_sql(map, value, &mut file);
+            let field_map = field_array_to_map(array);
+            let index_map = index_array_to_map(other);
+            self.generate_sql(field_map, value.clone(), &mut file);
+            self.generate_index(index_map, value.clone(), &mut file);
         }
     }
 
@@ -144,6 +152,25 @@ impl Generator<'_> {
         }
         let end_line = format!("\n) ENGINE={} DEFAULT CHARSET={};", self.engine.call(), self.charset);
         file.write_all(end_line.as_bytes()).expect("write error!");
+    }
+
+    fn generate_index(&self, vec: Vec<(String, String)>, table_name: String, file: &mut File) {
+        for iter in vec {
+            let (key, value) = iter;
+            let fields: Vec<&str> = value.split(",").collect();
+            if key == "unique" {
+                let mut index_key = table_name.clone();
+                let mut index = "".to_string();
+                for field in fields {
+                    index_key = index_key + "_" + field;
+                    index = index + "`" + &field + "`,";
+                }
+                index_key += "_uindex";
+                let index = &index[0..index.len() - 1];
+                let unique_line = format!("\n\nCREATE UNIQUE INDEX {} ON {} ({});", index_key, table_name, index);
+                file.write_all(unique_line.as_bytes()).expect("write error!");
+            }
+        }
     }
 
     // drop existing table
