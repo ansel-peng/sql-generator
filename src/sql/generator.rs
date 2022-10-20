@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::vec;
-use crate::sql::common::{Field, field_array_to_map, get_fields, get_indexes, get_md_field, get_table, index_array_to_map};
+use crate::sql::common::{Field, field_array_to_map, get_fields, get_index_line, get_indexes, get_md_field, get_table, index_array_to_map};
 
 
 const TRUE: &str = "true";
@@ -159,16 +159,15 @@ impl Generator<'_> {
             let (key, value) = iter;
             let fields: Vec<&str> = value.split(",").collect();
             if key == "unique" {
-                let mut index_key = table_name.clone();
-                let mut index = "".to_string();
-                for field in fields {
-                    index_key = index_key + "_" + field;
-                    index = index + "`" + &field + "`,";
-                }
+                let (index, mut index_key) = get_index_line(fields, table_name.clone());
                 index_key += "_uindex";
-                let index = &index[0..index.len() - 1];
                 let unique_line = format!("\n\nCREATE UNIQUE INDEX {} ON {} ({});", index_key, table_name, index);
                 file.write_all(unique_line.as_bytes()).expect("write error!");
+            } else if key == "index" {
+                let (index, mut index_key) = get_index_line(fields, table_name.clone());
+                index_key += "_index";
+                let index_line = format!("\n\nCREATE INDEX {} ON {} ({});", index_key, table_name, index);
+                file.write_all(index_line.as_bytes()).expect("write error!");
             }
         }
     }
@@ -176,7 +175,7 @@ impl Generator<'_> {
     // drop existing table
     fn drop_exist_table(&self, table_name: &String) -> Option<String> {
         if self.drop_exist {
-            return Some(format!("\nDROP TABLE IF EXISTS `{}`;", table_name));
+            return Some(format!("\n\nDROP TABLE IF EXISTS `{}`;", table_name));
         }
         return None;
     }

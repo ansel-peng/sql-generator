@@ -111,3 +111,15 @@ pub fn get_md_field(field: Field, map: &HashMap<String, Vec<String>>, index: usi
         .get(index)
         .expect("no index!")
 }
+
+pub fn get_index_line(fields: Vec<&str>, table_name: String) -> (String, String) {
+    let mut index_key = table_name;
+    let mut index = "".to_string();
+    for field in fields {
+        index_key = index_key + "_" + field;
+        index = index + "`" + &field + "`,";
+    }
+
+    let index = index[0..index.len() - 1].to_string();
+    return (index, index_key);
+}
